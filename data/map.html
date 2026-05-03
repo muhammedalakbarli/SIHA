@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SIHA Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: #0a0a0a; }
+    #map { width: 100%; height: 100vh; }
+
+    /* Dark tile filter */
+    .leaflet-tile { filter: brightness(0.55) saturate(0.6) hue-rotate(160deg); }
+
+    /* HUD-style info box */
+    #info {
+      position: fixed; bottom: 10px; left: 10px; z-index: 1000;
+      background: rgba(0,0,0,0.75); border: 1px solid #00a028;
+      color: #00ff41; font-family: monospace; font-size: 12px;
+      padding: 8px 12px; border-radius: 3px; min-width: 220px;
+    }
+    #info span { display: block; margin: 2px 0; }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+<div id="info">
+  <span id="i-lat">LAT  --</span>
+  <span id="i-lon">LON  --</span>
+  <span id="i-alt">ALT  --</span>
+  <span id="i-hdg">HDG  --</span>
+  <span id="i-spd">SPD  --</span>
+  <span id="i-tgt">TGT  0</span>
+</div>
+
+<script>
+// ── Map init ────────────────────────────────────────────────────────────────
+var map = L.map('map', { zoomControl: false, attributionControl: false })
+           .setView([40.4093, 49.8671], 15);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  attribution: '© OpenStreetMap'
+}).addTo(map);
+
+// Subtle zoom control (bottom-right)
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+// ── Drone icon (SVG arrow that rotates) ─────────────────────────────────────
+function droneIcon(heading) {
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">'
+    + '<g transform="rotate(' + heading + ' 16 16)">'
+    + '<polygon points="16,2 22,28 16,23 10,28" fill="#00ff41" stroke="#003300" stroke-width="1"/>'
+    + '</g></svg>';
+  return L.divIcon({
+    html: svg, className: '', iconSize: [32, 32], iconAnchor: [16, 16]
+  });
+}
+
+var droneMarker = L.marker([40.4093, 49.8671], { icon: droneIcon(0) }).addTo(map);
+
+// ── Flight trail ─────────────────────────────────────────────────────────────
+var trail = L.polyline([], {
+  color: '#00ff41', weight: 2, opacity: 0.7, dashArray: '4 4'
+}).addTo(map);
+
+// ── Targets ──────────────────────────────────────────────────────────────────
+var targets = {};
+var targetCount = 0;
+
+function targetIcon(label) {
+  return L.divIcon({
+    html: '<div style="background:#ff2020;border:1px solid #ff0000;color:#fff;'
+        + 'font:bold 10px monospace;padding:2px 4px;border-radius:2px;white-space:nowrap;">'
+        + label + '</div>',
+    className: '', iconAnchor: [0, 0]
+  });
+}
+
+// ── Geofence ─────────────────────────────────────────────────────────────────
+var geofenceLayer = null;
+var homeMarker    = null;
+
+// ── Auto-follow toggle ────────────────────────────────────────────────────────
+var autoFollow = true;
+
+// ── Python → JS bridge functions ─────────────────────────────────────────────
+
+/**
+ * Update drone position and heading on the map.
+ * Called from Python via page.runJavaScript("updateDrone(lat, lon, hdg, alt, spd)").
+ */
+function updateDrone(lat, lon, hdg, alt, spd) {
+  droneMarker.setLatLng([lat, lon]);
+  droneMarker.setIcon(droneIcon(hdg));
+  trail.addLatLng([lat, lon]);
+
+  if (autoFollow) { map.panTo([lat, lon], { animate: true, duration: 0.5 }); }
+
+  // Info panel
+  document.getElementById('i-lat').textContent = 'LAT  ' + lat.toFixed(5);
+  document.getElementById('i-lon').textContent = 'LON  ' + lon.toFixed(5);
+  document.getElementById('i-alt').textContent = 'ALT  ' + alt.toFixed(1) + ' m';
+  document.getElementById('i-hdg').textContent = 'HDG  ' + Math.round(hdg) + '°';
+  document.getElementById('i-spd').textContent = 'SPD  ' + (spd * 3.6).toFixed(1) + ' km/h';
+}
+
+/**
+ * Add or update a target marker.
+ * id:    unique string per target (e.g. "person_1")
+ * label: display text (e.g. "PERSON 87%")
+ */
+function addTarget(id, lat, lon, label) {
+  if (targets[id]) { map.removeLayer(targets[id]); }
+  targets[id] = L.marker([lat, lon], { icon: targetIcon(label) })
+                  .addTo(map)
+                  .bindPopup('<b>' + label + '</b><br>' + lat.toFixed(5) + ', ' + lon.toFixed(5));
+  targetCount = Object.keys(targets).length;
+  document.getElementById('i-tgt').textContent = 'TGT  ' + targetCount;
+}
+
+/** Remove a specific target by id. */
+function removeTarget(id) {
+  if (targets[id]) { map.removeLayer(targets[id]); delete targets[id]; }
+  targetCount = Object.keys(targets).length;
+  document.getElementById('i-tgt').textContent = 'TGT  ' + targetCount;
+}
+
+/** Clear all target markers. */
+function clearTargets() {
+  Object.values(targets).forEach(function(m){ map.removeLayer(m); });
+  targets = {};
+  targetCount = 0;
+  document.getElementById('i-tgt').textContent = 'TGT  0';
+}
+
+/**
+ * Draw (or redraw) the geofence polygon.
+ * coords: [[lat,lon], [lat,lon], ...]
+ */
+function setGeofence(coords) {
+  if (geofenceLayer) { map.removeLayer(geofenceLayer); }
+  geofenceLayer = L.polygon(coords, {
+    color: '#ff4400', weight: 2, fillColor: '#ff4400', fillOpacity: 0.08
+  }).addTo(map);
+}
+
+/** Remove geofence polygon. */
+function clearGeofence() {
+  if (geofenceLayer) { map.removeLayer(geofenceLayer); geofenceLayer = null; }
+}
+
+/** Mark home / take-off location. */
+function setHome(lat, lon) {
+  if (homeMarker) { map.removeLayer(homeMarker); }
+  homeMarker = L.marker([lat, lon], {
+    icon: L.divIcon({
+      html: '<div style="font-size:20px;">🏠</div>',
+      className: '', iconAnchor: [10, 20]
+    })
+  }).addTo(map).bindPopup('Home / Take-off');
+}
+
+/** Clear the flight trail. */
+function clearTrail() { trail.setLatLngs([]); }
+
+/** Enable / disable auto-pan to drone. */
+function setAutoFollow(enabled) { autoFollow = !!enabled; }
+</script>
+</body>
+</html>

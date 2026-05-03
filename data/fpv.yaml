@@ -1,0 +1,63 @@
+# SIHA FPV – YOLOv8 Custom Dataset Configuration
+#
+# Usage:
+#   python scripts/train.py --data data/fpv.yaml --model yolov8n.pt
+#
+# Dataset structure expected:
+#   data/
+#   ├── images/
+#   │   ├── train/   ← training images (.jpg / .png)
+#   │   └── val/     ← validation images
+#   └── labels/
+#       ├── train/   ← YOLO-format .txt labels
+#       └── val/
+#
+# Label format (one object per line):
+#   <class_id> <cx> <cy> <w> <h>   (all normalised 0–1)
+
+path: data                    # root directory of the dataset
+
+train: images/train
+val:   images/val
+test:  images/test            # optional – leave empty if not used
+
+# Number of classes
+nc: 6
+
+# Class names (customise to your mission)
+names:
+  0: person
+  1: vehicle
+  2: aircraft
+  3: boat
+  4: weapon
+  5: unknown
+
+# ── Augmentation (recommended for aerial / FPV data) ────────────────────────
+# These are passed directly to ultralytics trainer.
+augmentation:
+  hsv_h: 0.015          # hue shift
+  hsv_s: 0.7            # saturation
+  hsv_v: 0.4            # brightness
+  degrees: 15.0         # rotation (aerial views can be at any angle)
+  translate: 0.1
+  scale: 0.5
+  shear: 2.0
+  flipud: 0.5           # vertical flip – valid for nadir / overhead views
+  fliplr: 0.5
+  mosaic: 1.0           # mosaic augmentation (combines 4 images)
+  mixup: 0.1
+
+# ── Notes ────────────────────────────────────────────────────────────────────
+# Recommended model sizes for FPV drone use:
+#   yolov8n.pt  – nano    (fastest, ~3ms on CPU, lowest accuracy)
+#   yolov8s.pt  – small   (good balance for edge hardware)
+#   yolov8m.pt  – medium  (best accuracy on GPU-equipped GCS)
+#
+# Minimum dataset size per class: ~300 images for reliable detection.
+# For military/security applications, fine-tune on domain-specific data.
+#
+# Labelling tools:
+#   LabelImg (https://github.com/HumanSignal/labelImg)
+#   Roboflow  (https://roboflow.com)
+#   CVAT      (https://cvat.ai)

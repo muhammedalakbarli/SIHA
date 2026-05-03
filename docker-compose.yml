@@ -1,0 +1,74 @@
+version: "3.9"
+
+# ── SIHA FPV – Docker Compose ────────────────────────────────────────────────
+# Usage:
+#   docker compose up siha-fpv          # terminal FPV (demo mode)
+#   docker compose up siha-sitl         # connect to ArduPilot SITL
+#   docker compose run siha-train       # train custom YOLO model
+
+services:
+
+  # ── Terminal FPV (demo / offline) ──────────────────────────────────────────
+  siha-fpv:
+    build: .
+    image: siha-fpv:latest
+    container_name: siha_fpv
+    network_mode: host
+    devices:
+      - "/dev/video0:/dev/video0"     # USB webcam
+    volumes:
+      - ./logs:/app/logs              # persist flight logs
+      - ./data:/app/data              # dataset / map HTML
+      - yolov8_cache:/root/.config    # cache downloaded weights
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: >
+      python main_fpv.py
+        --demo
+        --detect none
+        --log
+        --log-level INFO
+    restart: "no"
+
+  # ── Connect to ArduPilot SITL ───────────────────────────────────────────────
+  siha-sitl:
+    build: .
+    image: siha-fpv:latest
+    container_name: siha_sitl
+    network_mode: host
+    devices:
+      - "/dev/video0:/dev/video0"
+    volumes:
+      - ./logs:/app/logs
+      - yolov8_cache:/root/.config
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: >
+      python main_fpv.py
+        --connect 127.0.0.1:14550
+        --detect yolo
+        --track
+        --log
+        --callsign SIHA-01
+    restart: "no"
+
+  # ── Custom model training ───────────────────────────────────────────────────
+  siha-train:
+    build: .
+    image: siha-fpv:latest
+    container_name: siha_train
+    volumes:
+      - ./data:/app/data
+      - ./runs:/app/runs
+      - yolov8_cache:/root/.config
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: >
+      python scripts/train.py
+        --model yolov8n.pt
+        --epochs 50
+        --device cpu
+    restart: "no"
+
+volumes:
+  yolov8_cache:

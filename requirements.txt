@@ -1,0 +1,16 @@
+# Core
+opencv-python>=4.8.0
+numpy>=1.24.0
+ultralytics>=8.0.0
+pymavlink>=2.4.0
+pygame>=2.5.0
+
+# GUI (optional – needed for main_gui.py)
+PyQt6>=6.5.0
+PyQt6-WebEngine>=6.5.0
+matplotlib>=3.7.0
+
+# Dev / testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+ruff>=0.1.0
